@@ -1,0 +1,222 @@
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Celso Bac Bo Pro</title>
+<style>
+body{margin:0;background:#0a1020;color:white;font-family:Arial;padding:15px}
+h1{text-align:center;color:#43e5b0}
+.card{background:#17223a;padding:15px;border-radius:14px;margin:13px 0}
+button{border:0;border-radius:9px;padding:13px 8px;color:white;font-weight:bold;margin:3px;cursor:pointer}
+.p{background:#2879ff}.b{background:#ed4b5b}.t{background:#159b70}
+.gray{background:#35445e}
+input{width:90%;padding:11px;margin:7px 0;border-radius:7px;border:0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:#24324d;padding:12px 4px;text-align:center;border-radius:9px}
+.big{font-size:22px;font-weight:bold;margin:8px}
+#history{display:flex;flex-wrap:wrap;gap:5px}
+.ball{padding:9px;border-radius:50%;font-weight:bold}
+small{color:#b7c4db;line-height:1.6}
+canvas{width:100%;height:180px;background:#111b30;border-radius:8px}
+</style>
+</head>
+<body>
+<h1>🎲 CELSO BAC BO PRO</h1>
+<p style="text-align:center">Estatísticas • Estratégias • Simulador</p>
+
+<div class="card">
+<h3>1. Registar resultado</h3>
+<button class="p" onclick="add('P')">PLAYER</button>
+<button class="b" onclick="add('B')">BANKER</button>
+<button class="t" onclick="add('T')">TIE</button>
+<button class="gray" onclick="undo()">Anular</button>
+<button class="gray" onclick="exportData()">Exportar</button>
+<button class="gray" onclick="importData()">Importar</button>
+<input id="file" type="file" accept=".json" hidden onchange="loadFile(event)">
+<p><small>Os dados são guardados quando o navegador permite armazenamento local.</small></p>
+</div>
+
+<div class="card">
+<h3>2. Estatísticas</h3>
+<div class="grid">
+<div class="stat">Player<div id="P" class="big">0</div><small id="pPct">0%</small></div>
+<div class="stat">Banker<div id="B" class="big">0</div><small id="bPct">0%</small></div>
+<div class="stat">Tie<div id="T" class="big">0</div><small id="tPct">0%</small></div>
+</div>
+<p id="total">Total: 0</p>
+<p id="streak">Sequência: —</p>
+</div>
+
+<div class="card">
+<h3>3. Gráfico de resultados</h3>
+<canvas id="chart" width="600" height="240"></canvas>
+</div>
+
+<div class="card">
+<h3>4. Testar estratégias</h3>
+<button class="gray" onclick="test('seguir')">Seguir P/B</button>
+<button class="gray" onclick="test('alternar')">Alternar P/B</button>
+<div id="testResult">Regista resultados para começar.</div>
+</div>
+
+<div class="card">
+<h3>5. Histórico</h3>
+<div id="history"></div>
+<button class="gray" onclick="clearHistory()">Apagar histórico</button>
+</div>
+
+<div class="card">
+<h3>6. Simulador de saldo fictício</h3>
+<label>Saldo inicial:</label><br>
+<input id="initial" type="number" value="10000" min="0"><br>
+<label>Valor fictício por rodada:</label><br>
+<input id="stake" type="number" value="100" min="1"><br>
+<label>Resultado da simulação:</label><br>
+<select id="win" style="padding:10px">
+<option value="win">Vitória fictícia (+1 aposta)</option>
+<option value="loss">Derrota fictícia (-1 aposta)</option>
+<option value="tie">Empate (sem alteração)</option>
+</select><br>
+<button class="t" onclick="simulate()">Simular rodada</button>
+<button class="gray" onclick="resetSim()">Reiniciar</button>
+<div id="balance" class="big">Saldo: 10.000</div>
+<small>Simulação educativa, sem dinheiro real e sem ligação a um casino.</small>
+</div>
+
+<p><small>Nota: as estratégias não preveem resultados futuros. A simulação usa ganhos e perdas fictícios e não representa as regras de pagamento de uma plataforma específica.</small></p>
+
+<script>
+let data=[];
+let balance=10000;
+
+try{
+ const saved=localStorage.getItem('celsoBacBo');
+ if(saved) data=JSON.parse(saved);
+}catch(e){}
+
+function save(){
+ try{localStorage.setItem('celsoBacBo',JSON.stringify(data));}
+ catch(e){}
+}
+
+function add(v){data.push(v);save();render();}
+function undo(){data.pop();save();render();}
+
+function clearHistory(){
+ if(confirm('Apagar todo o histórico?')){
+  data=[];save();render();
+ }
+}
+
+function pct(n,total){
+ return total?(n/total*100).toFixed(1)+'%':'0%';
+}
+
+function render(){
+ let n=data.length;
+ let c={P:0,B:0,T:0};
+ data.forEach(x=>c[x]++);
+ ['P','B','T'].forEach(x=>{
+  document.getElementById(x).textContent=c[x];
+ });
+ document.getElementById('pPct').textContent=pct(c.P,n);
+ document.getElementById('bPct').textContent=pct(c.B,n);
+ document.getElementById('tPct').textContent=pct(c.T,n);
+ document.getElementById('total').textContent='Total: '+n+' rodadas';
+
+ let streak=0;
+ for(let i=n-1;i>=0&&n&&data[i]===data[n-1];i--)streak++;
+ document.getElementById('streak').textContent=n?
+  'Último resultado: '+data[n-1]+' | Sequência: '+streak:
+  'Sequência: —';
+
+ const colors={P:'#2879ff',B:'#ed4b5b',T:'#159b70'};
+ document.getElementById('history').innerHTML=data.slice(-100).map(x=>
+  '<span class="ball" style="background:'+colors[x]+'">'+x+'</span>'
+ ).join('');
+ draw(c);
+}
+
+function draw(c){
+ const canvas=document.getElementById('chart');
+ const ctx=canvas.getContext('2d');
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ const vals=[c.P,c.B,c.T], names=['Player','Banker','Tie'];
+ const cols=['#2879ff','#ed4b5b','#159b70'];
+ const max=Math.max(1,...vals);
+ vals.forEach((v,i)=>{
+  const h=(v/max)*150;
+  const x=55+i*190;
+  ctx.fillStyle=cols[i];
+  ctx.fillRect(x,190-h,90,h);
+  ctx.fillStyle='white';
+  ctx.font='18px Arial';
+  ctx.fillText(String(v),x+30,180-h);
+  ctx.font='15px Arial';
+  ctx.fillText(names[i],x,220);
+ });
+}
+
+function test(mode){
+ let correct=0,total=0;
+ for(let i=1;i<data.length;i++){
+  let prev=data[i-1],actual=data[i];
+  if(prev==='T'||actual==='T')continue;
+  let guess=mode==='seguir'?prev:(prev==='P'?'B':'P');
+  total++;
+  if(guess===actual)correct++;
+ }
+ document.getElementById('testResult').innerHTML=
+  '<p>Estratégia: '+(mode==='seguir'?'Seguir P/B':'Alternar P/B')+
+  '</p><p>Acertos históricos: '+correct+'/'+total+
+  '</p><p>Taxa observada: '+pct(correct,total)+'</p>'+
+  '<small>Resultado passado, não previsão da próxima rodada.</small>';
+}
+
+function simulate(){
+ const initial=Number(document.getElementById('initial').value);
+ const stake=Number(document.getElementById('stake').value);
+ if(!Number.isFinite(initial)||!Number.isFinite(stake)||initial<0||stake<=0){
+  alert('Introduz valores válidos.');return;
+ }
+ if(balance===10000)balance=initial;
+ const outcome=document.getElementById('win').value;
+ if(outcome==='win')balance+=stake;
+ if(outcome==='loss')balance-=stake;
+ document.getElementById('balance').textContent=
+  'Saldo fictício: '+balance.toLocaleString('pt-PT');
+}
+function resetSim(){
+ balance=Number(document.getElementById('initial').value)||0;
+ document.getElementById('balance').textContent=
+  'Saldo fictício: '+balance.toLocaleString('pt-PT');
+}
+
+function exportData(){
+ const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');
+ a.href=url;a.download='celso-bacbo-historico.json';a.click();
+ URL.revokeObjectURL(url);
+}
+function importData(){document.getElementById('file').click();}
+function loadFile(e){
+ const file=e.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{
+   const arr=JSON.parse(reader.result);
+   if(!Array.isArray(arr)||!arr.every(x=>['P','B','T'].includes(x)))
+    throw Error();
+   data=arr;save();render();
+  }catch(err){alert('Ficheiro inválido.');}
+ };
+ reader.readAsText(file);
+}
+render();
+</script>
+</body>
+</html>
